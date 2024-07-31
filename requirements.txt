@@ -5,3 +5,4 @@ ipykernel==6.29.5
 psycopg2-binary==2.9.9
 numpy==2.0.1
 pandas==2.2.2
+pyspark==3.5.1
