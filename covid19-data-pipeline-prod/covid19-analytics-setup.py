@@ -38,7 +38,7 @@ src_bucket_prefixes = config.get('S3', 'SRC_BUCKET_PREFIXES')  # Set of location
 src_bucket_region = config.get('S3', 'SRC_BUCKET_REGION')
 
 job_bucket_name = config.get('S3', 'JOB_BUCKET_NAME')
-job_bucket_region = config.get('S3', 'JOB_BUCKET_REGION')
+job_region = config.get('S3', 'JOB_REGION')
 
 # Initialize s3 client to access source data s3 bucket
 src_s3_client = boto3.client('s3', region_name=src_bucket_region)
@@ -46,7 +46,7 @@ src_s3_client = boto3.client('s3', region_name=src_bucket_region)
 # Initialize s3 client to create and/or access raw data s3 bucket
 job_s3_client = boto3.client(
     's3', 
-    region_name=job_bucket_region,
+    region_name=job_region,
     aws_access_key_id=aws_key, 
     aws_secret_access_key=aws_secret
 )
@@ -113,9 +113,16 @@ def copy_objects_from_s3_to_s3(
                                 print(f"Exception: {e}")
             else:
                 print(f"No content in '{src_bucket_prefix}'\n")
+                
+                
+# Function to create s3 bucket 
+create_s3_if_not_exists(
+    job_bucket_name, 
+    job_bucket_region, 
+    job_s3_client
+)               
 
-create_s3_if_not_exists(job_bucket_name, job_bucket_region, job_s3_client)               
-
+# Function to copy data from source s3 to target s3
 copy_objects_from_s3_to_s3(
     src_bucket_name, 
     src_bucket_prefixes, 

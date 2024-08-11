@@ -21,9 +21,9 @@
     "--job-bookmark-option" : "job-bookmark-enable",
     "--job-language" : "python",
     "--CONFIG_BUCKET_NAME" : "jk-config-s3",
-    "--TempDir" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/setup-temporary/"
+    "--TempDir" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/temporary/"
   },
-  "maxRetries" : 5,
+  "maxRetries" : 1,
   "allocatedCapacity" : 4,
   "timeout" : 15,
   "maxCapacity" : 4.0,
