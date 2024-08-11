@@ -1,0 +1,40 @@
+{
+  "name" : "covid19-analytics-redshift-cluster",
+  "jobMode" : "SCRIPT",
+  "description" : "Configure redshift data warehouse for analytics",
+  "role" : "arn:aws:iam::211125552279:role/covid19-etl-s3full-glueservice-role",
+  "executionProperty" : {
+    "maxConcurrentRuns" : 4
+  },
+  "command" : {
+    "name" : "glueetl",
+    "scriptLocation" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/redshift-cluster-scripts/covid19-analytics-redshift-cluster.py",
+    "pythonVersion" : "3"
+  },
+  "defaultArguments" : {
+    "--CONFIG_FILE_KEY" : "covid19-analytics-config/covid19-analytics.config",
+    "--enable-metrics" : "true",
+    "--spark-event-logs-path" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/redshift-cluster-sparkHistoryLogs/",
+    "--enable-job-insights" : "false",
+    "--enable-observability-metrics" : "true",
+    "--enable-continuous-cloudwatch-log" : "true",
+    "--job-bookmark-option" : "job-bookmark-enable",
+    "--job-language" : "python",
+    "--CONFIG_BUCKET_NAME" : "jk-config-s3",
+    "--TempDir" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/temporary/"
+  },
+  "maxRetries" : 1,
+  "allocatedCapacity" : 4,
+  "timeout" : 15,
+  "maxCapacity" : 4.0,
+  "glueVersion" : "4.0",
+  "numberOfWorkers" : 4,
+  "workerType" : "G.1X",
+  "executionClass" : "FLEX",
+  "sourceControlDetails" : {
+    "provider" : "GITHUB",
+    "repository" : "covid-19-data-pipeline-aws",
+    "branch" : "main",
+    "folder" : "covid19-data-pipeline-prod"
+  }
+}
