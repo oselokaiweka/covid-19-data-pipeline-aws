@@ -1,0 +1,40 @@
+{
+  "name" : "covid19-analytics-setup",
+  "jobMode" : "SCRIPT",
+  "description" : "Create s3 bucket for raw data. \nCopy data from source s3 buckets to raw data s3 bucket. ",
+  "role" : "arn:aws:iam::211125552279:role/covid19-etl-s3full-glueservice-role",
+  "executionProperty" : {
+    "maxConcurrentRuns" : 4
+  },
+  "command" : {
+    "name" : "glueetl",
+    "scriptLocation" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/setup-scripts/covid19-analytics-setup.py",
+    "pythonVersion" : "3"
+  },
+  "defaultArguments" : {
+    "--CONFIG_FILE_KEY" : "covid19-analytics-config/covid19-analytics.config",
+    "--enable-metrics" : "true",
+    "--spark-event-logs-path" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/setup-sparkHistoryLogs/",
+    "--enable-job-insights" : "false",
+    "--enable-observability-metrics" : "true",
+    "--enable-continuous-cloudwatch-log" : "true",
+    "--job-bookmark-option" : "job-bookmark-enable",
+    "--job-language" : "python",
+    "--CONFIG_BUCKET_NAME" : "jk-config-s3",
+    "--TempDir" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/temporary/"
+  },
+  "maxRetries" : 1,
+  "allocatedCapacity" : 4,
+  "timeout" : 15,
+  "maxCapacity" : 4.0,
+  "glueVersion" : "4.0",
+  "numberOfWorkers" : 4,
+  "workerType" : "G.1X",
+  "executionClass" : "FLEX",
+  "sourceControlDetails" : {
+    "provider" : "GITHUB",
+    "repository" : "covid-19-data-pipeline-aws",
+    "branch" : "main",
+    "folder" : "aws-glue-job-scripts"
+  }
+}
