@@ -95,7 +95,10 @@ def main():
                     },
                     Targets={
                         'S3Targets': [
-                            {'Path': f"s3://{job_bucket_name}/{job_rawData_prefix}"}
+                            {
+                                'Path': fr"s3://{job_bucket_name}/{job_rawData_prefix}/",
+                                'Exclusions': ['**.json'] # Double ** matches all .json files in current folder and all subfolders
+                            }
                         ]
                     }
                 )
@@ -142,12 +145,13 @@ def main():
                     glue_client.update_table(
                         DatabaseName=schema_name,
                         TableInput={
-                            'Name': new_table_name,
+                            'Name': current_table_name,
                             'StorageDescriptor': table['StorageDescriptor'],
                             'TableType': table['TableType'],
                             'Description': table.get('Description', '')  # Preserve existing description if any
     
-                        }
+                        },
+                        NewTableName=new_table_name  # Specify the new table name here
                     )
                     logger.info("\n'%s' sccessfully renamed to '%s'", current_table_name, new_table_name)
                 except ClientError as e:
