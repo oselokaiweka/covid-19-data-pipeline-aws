@@ -162,12 +162,18 @@ def main():
                     
                     glue_client.create_table(DatabaseName=schema_name, TableInput=new_table_input)
                     logger.info("\n'%s' successfully created as '%s'", current_table_name, new_table_name)
+                    try:
+                        # Delete the old table
+                        glue_client.delete_table(DatabaseName=schema_name, Name=current_table_name)
+                        logger.info("\n'%s' successfully deleted", current_table_name) 
+                    except ClientError as e:
+                        print(current_table_name + 'not deleted. Error: ' + e)
                     
-                    # Delete the old table
-                    glue_client.delete_table(DatabaseName=schema_name, Name=current_table_name)
-                    logger.info("\n'%s' successfully deleted", current_table_name)  
-                except Exception as e:
-                    logger.error("\nFailed to complete the Glue job. Error: %s", str(e), exc_info=True)
+                except ClientError as e:
+            logger.error("\nUnable to rename %s Error: %s", current_table_name, str(e), exc_info=True)
+                    
+    except Exception as e:
+        logger.error("\nFailed to complete the Glue job. Error: %s", str(e), exc_info=True)
 
 
 
