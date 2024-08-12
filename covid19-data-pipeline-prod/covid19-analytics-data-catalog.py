@@ -94,7 +94,7 @@ def main():
 
         # Start crawler
         glue_client.start_crawler(Name=crawler_name)
-        logger.info(f"\n'{crawler_name}' crawler has been started.")
+        logger.info("\n'%s' crawler has been started.", crawler_name)
         
         # Wait for crawler to finish
         while True:
@@ -106,7 +106,7 @@ def main():
         # Fetch list of tables created by crawler
         tables = glue_client.get_tables(DatabaseName=schema_name)['TableList']
         table_count = len(tables)
-        logger.info(f"\nTotal of {table_count} created by crawler")
+        logger.info("\nTotal of %s created by crawler", table_count)
         
         # Rename tables created by crawler
         for table in tables:
@@ -117,7 +117,7 @@ def main():
                     glue_client.delete_table(DatabaseName=schema_name, Name=current_table_name)
                     continue
                 except ClientError as e:
-                    logger.warning(f"\nFailed to delete .json file table: '{current_table_name}'\nError: {str(e)}")
+                    logger.warning("\nFailed to delete .json file table: '%s'\nError: %s",current_table_name, str(e))
             
             new_table_name = extract_table_name(job_rawData_prefix, file_path)
             try:
@@ -131,13 +131,13 @@ def main():
 
                     }
                 )
-                logger.info(f"\n'{current_table_name}' sccessfully renamed to '{new_table_name}'")
+                logger.info("\n'%s' sccessfully renamed to '%s'", current_table_name, new_table_name)
             except ClientError as e:
-                logger.error(f"\nUnable to rename {current_table_name} Error: {str(e)}", exc_info=True)
+                logger.error("\nUnable to rename %s Error: %s", current_table_name, str(e), exc_info=True)
             
   
     except Exception as e:
-        logger.error(f"\nFailed to complete the Glue job. Error: {str(e)}", exc_info=True)
+        logger.error("\nFailed to complete the Glue job. Error: %s", str(e), exc_info=True)
 
 
 
