@@ -142,24 +142,32 @@ def main():
                 
             else:
                 try:
-                    glue_client.update_table(
-                        DatabaseName=schema_name,
-                        TableInput={
-                            'Name': current_table_name,
-                            'StorageDescriptor': table['StorageDescriptor'],
-                            'TableType': table['TableType'],
-                            'Description': table.get('Description', '')  # Preserve existing description if any
-    
-                        },
-                        NewTableName=new_table_name  # Specify the new table name here
-                    )
-                    logger.info("\n'%s' sccessfully renamed to '%s'", current_table_name, new_table_name)
-                except ClientError as e:
-                    logger.error("\nUnable to rename %s Error: %s", current_table_name, str(e), exc_info=True)
-            
-  
-    except Exception as e:
-        logger.error("\nFailed to complete the Glue job. Error: %s", str(e), exc_info=True)
+                    # Create a new table with the new name
+                    new_table_input = {
+                        'Name': new_table_name,
+                        'StorageDescriptor': table['StorageDescriptor'],
+                        'TableType': table['TableType'],
+                        'Description': table.get('Description', ''),  # Preserve existing description if any
+                        'Parameters': table.get('Parameters', {}),
+                        'PartitionKeys': table.get('PartitionKeys', []),
+                        'Retention': table.get('Retention', 0),
+                        'LastAccessTime': table.get('LastAccessTime'),
+                        'LastAnalyzedTime': table.get('LastAnalyzedTime'),
+                        'ViewOriginalText': table.get('ViewOriginalText', ''),
+                        'ViewExpandedText': table.get('ViewExpandedText', ''),
+                        'TableType': table.get('TableType', 'EXTERNAL_TABLE'),
+                        'TargetTable': table.get('TargetTable'),
+                        'PartitionKeys': table.get('PartitionKeys', [])
+                    }
+                    
+                    glue_client.create_table(DatabaseName=schema_name, TableInput=new_table_input)
+                    logger.info("\n'%s' successfully created as '%s'", current_table_name, new_table_name)
+                    
+                    # Delete the old table
+                    glue_client.delete_table(DatabaseName=schema_name, Name=current_table_name)
+                    logger.info("\n'%s' successfully deleted", current_table_name)  
+                except Exception as e:
+                    logger.error("\nFailed to complete the Glue job. Error: %s", str(e), exc_info=True)
 
 
 
@@ -189,4 +197,3 @@ def extract_table_name(base_folder, full_path, s3_client):
 
 if __name__ == "__main__":
     main()
-
