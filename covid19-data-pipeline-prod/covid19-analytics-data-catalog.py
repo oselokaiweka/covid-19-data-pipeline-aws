@@ -74,29 +74,40 @@ def main():
             aws_access_key_id=aws_key, 
             aws_secret_access_key=aws_secret
         )
-
-        crawler_response = glue_client.create_crawler(
-            Name=crawler_name,
-            Role=crawler_roleArn,
-            DatabaseName=schema_name,
-            TablePrefix='',  # No prefix needed
-            RecrawlPolicy={'RecrawlBehavior': 'CRAWL_EVERYTHING'},
-            SchemaChangePolicy={
-                'UpdateBehavior': 'UPDATE_IN_DATABASE', 
-                'DeleteBehavior': 'DEPRECATE_IN_DATABASE'
-            },
-            Targets={
-                'S3Targets': [
-                    {'Path': f"s3://{job_bucket_name}/{job_rawData_prefix}"}
-                ]
-            }
-        )
+        
+        # Check if crawler exists, creates crawler if not found
+        try:
+            crawler_response = glue_client.get_crawler(crawler_name)
+            logger.info("Crawler '%s' already exists.", crawler_name)
+        except ClientError as e:
+            logger.warning("'%s' glue crawler object not found. Creating crawler...", crawler_name)
+            
+            try:
+                crawler_response = glue_client.create_crawler(
+                    Name=crawler_name,
+                    Role=crawler_roleArn,
+                    DatabaseName=schema_name,
+                    TablePrefix='',  # No prefix needed
+                    RecrawlPolicy={'RecrawlBehavior': 'CRAWL_EVERYTHING'},
+                    SchemaChangePolicy={
+                        'UpdateBehavior': 'UPDATE_IN_DATABASE', 
+                        'DeleteBehavior': 'DEPRECATE_IN_DATABASE'
+                    },
+                    Targets={
+                        'S3Targets': [
+                            {'Path': f"s3://{job_bucket_name}/{job_rawData_prefix}"}
+                        ]
+                    }
+                )
+                logger.info("Glue crawler '%s' has been created successfully.", crawler_name)
+            except ClientError as create_error:
+                logger.error("Failed to create crawler '%s'. Error: %s", crawler_name, str(create_error), exc_info=True)
 
         # Start crawler
         glue_client.start_crawler(Name=crawler_name)
         logger.info("\n'%s' crawler has been started.", crawler_name)
         
-        # Wait for crawler to finish
+        # Wait for crawler to finish cataloging target data
         while True:
             crawler_status = glue_client.get_crawler(Name=crawler_name)['Crawler']['State']
             if crawler_status in ['READY', 'SUCCEEDED']:
