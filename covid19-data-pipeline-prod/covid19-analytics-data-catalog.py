@@ -123,28 +123,35 @@ def main():
         for table in tables:
             current_table_name = table['Name']
             file_path = table['StorageDescriptor']['Location']
-            if file_path.endswith('.json'):
+            print(file_path)
+
+            # Extract new table name from file path as defined in function
+            new_table_name = extract_table_name(job_rawData_prefix, file_path, job_s3_client)
+            
+            # When the function returns a None, then the table does note match desired set
+            if new_table_name == None:
                 try:
                     glue_client.delete_table(DatabaseName=schema_name, Name=current_table_name)
-                    continue
+                    print(current_table_name + ' deleted')
                 except ClientError as e:
+                    print(current_table_name + ' not deleted')
                     logger.warning("\nFailed to delete .json file table: '%s'\nError: %s",current_table_name, str(e))
-            
-            new_table_name = extract_table_name(job_rawData_prefix, file_path)
-            try:
-                glue_client.update_table(
-                    DatabaseName=schema_name,
-                    TableInput={
-                        'Name': new_table_name,
-                        'StorageDescriptor': table['StorageDescriptor'],
-                        'TableType': table['TableType'],
-                        'Description': table.get('Description', '')  # Preserve existing description if any
-
-                    }
-                )
-                logger.info("\n'%s' sccessfully renamed to '%s'", current_table_name, new_table_name)
-            except ClientError as e:
-                logger.error("\nUnable to rename %s Error: %s", current_table_name, str(e), exc_info=True)
+                
+            else:
+                try:
+                    glue_client.update_table(
+                        DatabaseName=schema_name,
+                        TableInput={
+                            'Name': new_table_name,
+                            'StorageDescriptor': table['StorageDescriptor'],
+                            'TableType': table['TableType'],
+                            'Description': table.get('Description', '')  # Preserve existing description if any
+    
+                        }
+                    )
+                    logger.info("\n'%s' sccessfully renamed to '%s'", current_table_name, new_table_name)
+                except ClientError as e:
+                    logger.error("\nUnable to rename %s Error: %s", current_table_name, str(e), exc_info=True)
             
   
     except Exception as e:
@@ -152,17 +159,24 @@ def main():
 
 
 
-def extract_table_name(base_folder, full_path):
-    # Use regex to create new table name from all 'non-json' file types.
-    # Match specified prefix, all in-between sub-prifexes and file name
-    # Drop all sub-prifexes '(.*)' and exclude json '(?!\.json$)'. 
-    match = re.search(
-        fr'{base_folder}/([^/]+)/(?:.*/)?([^/]+)(?!\.json$)\.[^/]+$',
-        full_path
-    )
-    if match:
-        first_sub_folder = match.group(1) # '([^/]+)' folder after base folder
-        file_name = match.group(2)  # '([^/]+)' File name without extension
+def extract_table_name(base_folder, full_path, s3_client):
+    # Parse bucket name and prefix from full_path
+    parsed_url = re.match(r's3://([^/]+)/(.+)', full_path)
+    bucket_name = parsed_url.group(1)
+    prefix = parsed_url.group(2).rstrip('/') + '/'  # Ensure the prefix ends with '/'
+    
+    # List objects in the S3 path
+    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+    file_name = None
+    
+    # Find the first non-directory object (file)
+    for obj in response.get('Contents', []):
+        if not obj['Key'].endswith('/'):
+            file_name = obj['Key'].split('/')[-1].split('.')[0]
+            break
+    
+    if file_name:
+        first_sub_folder = prefix.split('/')[1]  # Get the first sub-folder
         new_table_name = f'{first_sub_folder}_{file_name}' # Concatenate
         return new_table_name
     else:
