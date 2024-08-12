@@ -170,7 +170,7 @@ def main():
                         print(current_table_name + 'not deleted. Error: ' + e)
                     
                 except ClientError as e:
-            logger.error("\nUnable to rename %s Error: %s", current_table_name, str(e), exc_info=True)
+                    logger.error("\nUnable to rename %s Error: %s", current_table_name, str(e), exc_info=True)
                     
     except Exception as e:
         logger.error("\nFailed to complete the Glue job. Error: %s", str(e), exc_info=True)
