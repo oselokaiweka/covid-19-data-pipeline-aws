@@ -126,30 +126,5 @@ def main():
         logger.error("\nFailed to complete the Glue job. Error: %s", str(e), exc_info=True)
 
 
-
-def extract_table_name(base_folder, full_path, s3_client):
-    # Parse bucket name and prefix from full_path
-    parsed_url = re.match(r's3://([^/]+)/(.+)', full_path)
-    bucket_name = parsed_url.group(1)
-    prefix = parsed_url.group(2).rstrip('/') + '/'  # Ensure the prefix ends with '/'
-    
-    # List objects in the S3 path
-    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    file_name = None
-    
-    # Find the first non-directory object (file)
-    for obj in response.get('Contents', []):
-        if not obj['Key'].endswith('/'):
-            file_name = obj['Key'].split('/')[-1].split('.')[0]
-            break
-    
-    if file_name:
-        first_sub_folder = prefix.split('/')[1]  # Get the first sub-folder
-        new_table_name = f'{first_sub_folder}_{file_name}' # Concatenate
-        return new_table_name
-    else:
-        return None
-
-
 if __name__ == "__main__":
     main()
