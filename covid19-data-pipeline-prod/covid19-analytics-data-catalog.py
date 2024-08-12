@@ -77,7 +77,7 @@ def main():
         
         # Check if crawler exists, creates crawler if not found
         try:
-            crawler_response = glue_client.get_crawler(crawler_name)
+            crawler_response = glue_client.get_crawler(Name=crawler_name)
             logger.info("Crawler '%s' already exists.", crawler_name)
         except ClientError as e:
             logger.warning("'%s' glue crawler object not found. Creating crawler...", crawler_name)
