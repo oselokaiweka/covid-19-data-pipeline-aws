@@ -2,11 +2,18 @@ import sys
 import time
 import boto3
 import logging
+import psycopg2
 import configparser
+import pandas as pd
+import awswrangler as wr
+from io import StringIO
 from pathlib import Path
+from pyspark.sql import SparkSession
 from botocore.exceptions import ClientError
 from awsglue.utils import getResolvedOptions
 from concurrent.futures import ThreadPoolExecutor, as_completed
+  
+spark = SparkSession.builder.master("local[*]").appName("Join").getOrCreate()
 
 # Configure logging
 logging.basicConfig(
@@ -14,6 +21,7 @@ logging.basicConfig(
     format='%(asctime)s %(levelname) %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 
 def main():
     try:
@@ -51,8 +59,7 @@ def main():
         schema_name = config.get('GLUE', 'SCHEMA_NAME')
         job_region = config.get('S3', 'JOB_REGION')
         
-        
-        
+
         # Initialize S3 client to create and/or access staging s3 bucket
         job_s3_client = boto3.client(
             's3', 
@@ -69,356 +76,127 @@ def main():
             aws_secret_access_key=aws_secret
         )
         
-        # Initialize Athena client to query data and download query results
-        athena_client = boto3.client(
-            'athena',
+        # Initialize redshift client to create tables from dataframes structures and copy data
+        redshift_client = boto3.client(
+            'redshift',
             region_name=job_region,
             aws_access_key_id=aws_key, 
             aws_secret_access_key=aws_secret
         )
-import time
-import configparser
 
-import boto3
-import psycopg2
-import pandas as pd
-from botocore.exceptions import ClientError
+        # Initialize ec2 client to acess VPC Endpoint
+        ec2_client = boto3.resource(
+            'ec2',
+            region_name=job_region,
+            aws_access_key_id=aws_key, 
+            aws_secret_access_key=aws_secret
+        )
 
-from pyspark.sql import SparkSession
-  
-spark = SparkSession.builder.master("local[*]").appName("Join").getOrCreate()
-config = configparser.ConfigParser()
-config.read_file(open('covid19-analytics.config'))
-
-KEY = config.get('AWS', 'KEY')
-SECRET = config.get('AWS', 'SECRET')
-
-TARGET_OUTPUT_BUCKET=config.get('S3', 'TARGET_OUTPUT_BUCKET')
-TARGET_OUTPUT_S3 = config.get('S3', 'TARGET_OUTPUT_S3')
-TARGET_OUTPUT_DIR=config.get('S3', 'TARGET_OUTPUT_DIR')
-TARGET_REGION = config.get('S3', 'TARGET_REGION')
-TMP_DIR = config.get('FILE_PATHS', 'TMP_DIR')
-
-DWH_CLUSTER_TYPE = config.get('DWH', 'DWH_CLUSTER_TYPE')
-DWH_NUM_NODES = config.get('DWH', 'DWH_NUM_NODES')
-DWH_NODE_TYPE = config.get('DWH', 'DWH_NODE_TYPE')
-DWH_CLUSTER_IDENTIFIER = config.get('DWH', 'DWH_CLUSTER_IDENTIFIER')
-DWH_DB = config.get('DWH', 'DWH_DB')
-DWH_DB_USER = config.get('DWH', 'DWH_DB_USER')
-DWH_DB_PASSWORD = config.get('DWH', 'DWH_DB_PASSWORD')
-DWH_PORT = config.get('DWH', 'DWH_PORT')
-DWH_IAM_ROLE_NAME = config.get('DWH', 'DWH_IAM_ROLE_NAME')
-OUTPUT_S3_CLIENT = boto3.client(
-    's3', 
-    region_name=TARGET_REGION,
-    aws_access_key_id=KEY, 
-    aws_secret_access_key=SECRET
-)
-
-redshift_client = boto3.client(
-    'redshift',
-    region_name=TARGET_REGION,
-    aws_access_key_id=KEY,
-    aws_secret_access_key=SECRET
-)
-
-ec2_client = boto3.resource(
-    'ec2',
-    region_name=TARGET_REGION,
-    aws_access_key_id=KEY,
-    aws_secret_access_key=SECRET
-)
-
-iam_client = boto3.client(
-    'iam',
-    region_name=TARGET_REGION,
-    aws_access_key_id=KEY,
-    aws_secret_access_key=SECRET
-)
-enigma_jhu = pd.read_csv(f'{TMP_DIR}/enigma_jhu.csv')
-testing_data_states_daily = pd.read_csv(f'{TMP_DIR}/testing-datastates_daily.csv')
-
-factCovid_1 = enigma_jhu[['fips', 'province_state', 'country_region', 'confirmed', 'deaths', 'recovered', 'active' ]]
-factCovid_2 = testing_data_states_daily[['fips', 'date', 'positive', 'negative', 'hospitalizedcurrently', 'hospitalized', 'hospitalizeddischarged' ]]
-factCovid = pd.merge(factCovid_1, factCovid_2, on='fips', how='inner')
-print(len(factCovid))
-
-factCovid = factCovid.drop_duplicates(keep='first')
-dimHospital = pd.read_csv(f'{TMP_DIR}/hospital-bedsjson.csv')
-dimHospital =  dimHospital[['fips', 'state_name', 'latitude', 'longtitude', 'hq_address', 'hospital_name', 'hospital_type', 'hq_city', 'hq_state']]
-dimHospital = dimHospital.rename(columns={'longtitude': 'longitude'})
-
-dimHospital = dimHospital.drop_duplicates(keep='first')
-
-dimHospital['latitude'] = pd.to_numeric(dimHospital['latitude'], errors= 'coerce')
-dimHospital['longitude'] = pd.to_numeric(dimHospital['longitude'], errors= 'coerce')
-dimDate = pd.read_csv(f'{TMP_DIR}/testing-datastates_daily.csv')
-dimDate = dimDate[['fips', 'date']]
-
-dimDate['date'] = pd.to_datetime(dimDate['date'], format='%Y%m%d')
-dimDate['year'] = dimDate['date'].dt.year
-dimDate['month'] = dimDate['date'].dt.month
-dimDate["day_of_week"] = dimDate['date'].dt.dayofweek
-
-dimDate = dimDate.drop_duplicates(keep='first')
-
-dimDate['fips'] = dimDate['fips'].astype(float)
-dimDate['date'] = pd.to_datetime(dimDate['date'], errors= 'coerce')
-dimDate['date'] = dimDate['date'].astype('datetime64[ns]')
-enigma_jhu = spark.read.csv(
-    f'{TMP_DIR}/enigma_jhu.csv', 
-    header=True, 
-    inferSchema=True
-)
-
-ny_times_us_county = spark.read.csv(
-    f'{TMP_DIR}/us_county.csv', 
-    header=True, 
-    inferSchema=True
-)
-
-dimRegion_1 = enigma_jhu.select('fips', 'province_state', 'country_region', 'latitude', 'longitude')
-dimRegion_2 = ny_times_us_county.select('fips', 'county', 'state')
-
-dimRegion_1 = dimRegion_1.repartition(4, 'fips')
-dimRegion_2 = dimRegion_2.repartition(4, 'fips')
-dimRegion_2 = dimRegion_2.withColumnRenamed('fips', 'fips2')
-
-dimRegion = dimRegion_1.join(
-    dimRegion_2, 
-    dimRegion_1["fips"] == dimRegion_2["fips2"], 
-    "inner"
-)
-
-dimRegion = dimRegion.drop('fips2')
-print(dimRegion.count())
-
-dimRegion = dimRegion.distinct()
-print(dimRegion.count())
-
-dimRegion = dimRegion.toPandas()
-dimRegion['fips'] = dimRegion['fips'].astype(float)
-
-dimRegion['latitude'] = pd.to_numeric(dimRegion['latitude'], errors= 'coerce')
-dimRegion['longitude'] = pd.to_numeric(dimRegion['longitude'], errors= 'coerce')
-factCovid.to_csv(f"{TMP_DIR}/factCovid.csv"
-OUTPUT_S3_CLIENT.upload_file(
-    f"{TMP_DIR}/factCovid.csv",
-    Bucket=TARGET_OUTPUT_S3,
-    Key=f'{TARGET_OUTPUT_DIR}/factCovid.csv',
-)
-
-dimHospital.to_csv(f"{TMP_DIR}/dimHospital.csv")
-OUTPUT_S3_CLIENT.upload_file(
-    f"{TMP_DIR}/dimHospital.csv",
-    Bucket=TARGET_OUTPUT_S3,
-    Key=f'{TARGET_OUTPUT_DIR}/dimHospital.csv',
-)
-                 
-dimDate.to_csv(f"{TMP_DIR}/dimDate.csv")
-OUTPUT_S3_CLIENT.upload_file(
-    f"{TMP_DIR}/dimDate.csv",
-    Bucket=TARGET_OUTPUT_S3,
-    Key=f'{TARGET_OUTPUT_DIR}/dimDate.csv',
-)
-                 
-dimRegion.to_csv(f"{TMP_DIR}/dimRegion.csv")
-OUTPUT_S3_CLIENT.upload_file(
-    f"{TMP_DIR}/dimRegion.csv",
-    Bucket=TARGET_OUTPUT_S3,
-    Key=f'{TARGET_OUTPUT_DIR}/dimRegion.csv',
-)
-                 
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-factCovid_sql = f"{pd.io.sql.get_schema(factCovid.reset_index(), 'factCovid')};"
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-staging_factCovid_sql = f"{pd.io.sql.get_schema(factCovid.reset_index(), 'staging_factCovid')};"
-
-
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-dimHospital_sql = f"{pd.io.sql.get_schema(dimHospital.reset_index(), 'dimHospital')};"
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-staging_dimHospital_sql =  f"{pd.io.sql.get_schema(dimHospital.reset_index(), 'staging_dimHospital')};"
-
-
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-dimDate_sql = f"{pd.io.sql.get_schema(dimDate.reset_index(), 'dimDate')};"
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-staging_dimDate_sql =  f"{pd.io.sql.get_schema(dimDate.reset_index(), 'staging_dimDate')};"
-
-
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-dimRegion_sql = f"{pd.io.sql.get_schema(dimRegion.reset_index(), 'dimRegion')};"
-# Construct CREATE TABLE SQL dynamically from pandas dataframe
-staging_dimRegion_sql =  f"{pd.io.sql.get_schema(dimRegion.reset_index(), 'staging_dimRegion')};"
-# Method implements retries while obtaining redshift properties in case creating cluster is yet complete
-def get_redshift_props(redshift_client, cluster_identifier):
-    retries = 30
-    retry_delay = 30 # Delay between retries in seconds
-    for attempt in range(retries):
-        try:
-            clusterProps = redshift_client.describe_clusters(ClusterIdentifier=cluster_identifier)['Clusters'][0]
-            if clusterProps['ClusterAvailabilityStatus'] == 'Available':
-                return clusterProps
-            elif clusterProps['ClusterAvailabilityStatus'] != 'Available':
-                if attempt < retries -1:
-                    print(f"Cluster '{cluster_identifier}' not ready. Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-        except redshift_client.exceptions.ClusterNotFoundFault as e:
-            if attempt < retries -1:
-                print(f"Cluster '{cluster_identifier}' not found. Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay/3)
-            else:
-                raise e # Raise the last exception if the retries are exhausted
-def pretty_redshift_props(props):
-    pd.set_option('display.max.colwidth', 0)
-    keysToShow = ['ClusterIdentifier', 'ClusterStatus', 'NodeType', 'NumberOfNodes', 'DBName', 'MasterUsername', 'Endpoint', 'VpcId']
-    x = [(k, v) for k, v in props.items() if k in keysToShow]
-    return pd.DataFrame(data=x, columns=['Parameter', 'value'])
-
-clusterProps = get_redshift_props(redshift_client, DWH_CLUSTER_IDENTIFIER)
-if clusterProps:
-    DWH_ENDPOINT = clusterProps['Endpoint']['Address']
-    DWH_ROLE_ARN = clusterProps['IamRoles'][0]['IamRoleArn']
-try:
-    vpc = ec2_client.Vpc(id=clusterProps['VpcId'])
-    default_SG = list(vpc.security_groups.all())[0]
-    print(default_SG)
-
-    default_SG.authorize_ingress(
-        GroupName=default_SG.group_name,
-        CidrIp='0.0.0.0/0',
-        IpProtocol='TCP',
-        FromPort=int(DWH_PORT),
-        ToPort=int(DWH_PORT),
-    )
-except ClientError as e:
-    # Check for duplicate rule errors
-    error_code = e.response['Error']['Code']
-    if error_code == 'InvalidPermission.Duplicate':
-        print('Security group rule exists, no further actions required')
-    else:
-        raise e
-except Exception as e:
-    raise e
-try:
-    conn = psycopg2.connect(
-        host=DWH_ENDPOINT,
-        dbname=DWH_DB,
-        user=DWH_DB_USER,
-        password=DWH_DB_PASSWORD,
-        port=int(DWH_PORT)
-    )
-except Exception as e:
-    print(e)
-
-conn.set_session(autocommit=True)
-
-try:
-    cur = conn.cursor()
-except Exception as e:
-    print("Error: Could not obtain database cursor")
-    print(e)
-# Create tables
-try:
-    cur.execute(staging_factCovid_sql)
-    cur.execute(factCovid_sql)
-except Exception as e:
-    print(e)
-
-try:
-    cur.execute(staging_dimHospital_sql)
-    cur.execute(dimHospital_sql)
-except Exception as e:
-    print(e)
-
-try:
-    cur.execute(staging_dimDate_sql)
-    cur.execute(dimDate_sql)
-except Exception as e:
-    print(e)
+        # Initialize iam client to obtain role arn for redshift
+        iam_client = boto3.client(
+            'iam',
+            region_name=job_region,
+            aws_access_key_id=aws_key, 
+            aws_secret_access_key=aws_secret
+        )
+        
+        # Call function to load data into dataframes
+        factCovid, dimHospital, dimRegion, dimDate = load_files_into_dataframes(job_staging_s3Path=job_staging_s3Path)
+        print(factCovid.head(2))
+        print(dimRegion.head(2))
+        print(dimHospital.head(2))
+        print(dimDate.head(2))
+        
+    except Exception as e:
+        logger.error('Failed to process data and load into dataframes. Error: %s', e)
+        raise
     
-try:
-    cur.execute(staging_dimRegion_sql)
-    cur.execute(dimRegion_sql)
-except Exception as e:
-    print(e)
-try:
-    cur.execute(
-    f"""
-    copy staging_dimhospital
-    from '{TARGET_OUTPUT_BUCKET}dimHospital.csv'
-    credentials 'aws_iam_role={DWH_ROLE_ARN}'
-    delimiter ','
-    region '{TARGET_REGION}'
-    IGNOREHEADER 1
-    EMPTYASNULL
-    BLANKSASNULL
-    MAXERROR 100
-    """
-    )
-except ClientError as error:
-    print(error)
-except Exception as e:
-    print(e)
+# Define function to load csv data into dataframes
+def load_files_into_dataframes(job_staging_s3Path):
+    
+    # FACT TABLE >>>
+    # Initilizing two dataframes to create the fact table according to star schema data model
+    enigma_jhu = wr.s3.read_csv(fr"{job_staging_s3Path.rstrip('/')}/enigma_jhu.csv")
+    rearc_covid_19_testing_data = wr.s3.read_csv(fr"{job_staging_s3Path.rstrip('/')}/rearc_covid_19_testing_data.csv")
+    rearc_covid_19_testing_data['date'] = pd.to_datetime(rearc_covid_19_testing_data['date'], errors= 'coerce')
+
+    
+    # Select required columns and deduplicate records
+    factCovid_1 = enigma_jhu[['fips', 'province_state', 'country_region', 'confirmed', 'deaths', 'recovered', 'active' ]].drop_duplicates(keep='first')
+    factCovid_2 = rearc_covid_19_testing_data[['fips', 'date', 'positive', 'negative', 'hospitalizedcurrently', 'hospitalized', 'hospitalizeddischarged' ]].drop_duplicates(keep='first')
+    
+    # Merge (join) tables
+    factCovid = pd.merge(factCovid_1, factCovid_2, on='fips', how='inner')
+
+
+    # DIMENSION TABLE 1 >>>
+    # Initializing dimHospital dataframe to create a dimension table
+    rearc_usa_hospital_beds = wr.s3.read_csv(fr"{job_staging_s3Path.rstrip('/')}/rearc_usa_hospital_beds.csv")
+    
+    # Select required columns and deduplicate records
+    dimHospital =  rearc_usa_hospital_beds[['fips', 'state_name', 'latitude', 'longtitude', 'hq_address', 'hospital_name', 'hospital_type', 'hq_city', 'hq_state']].drop_duplicates(keep='first')
+    dimHospital = dimHospital.rename(columns={'longtitude': 'longitude'}) # fix typo in column name
+    
+    # Nulling invalid data types in numeric columns
+    dimHospital['latitude'] = pd.to_numeric(dimHospital['latitude'], errors= 'coerce')
+    dimHospital['longitude'] = pd.to_numeric(dimHospital['longitude'], errors= 'coerce')
     
     
-try:
-    cur.execute(
-    f"""
-    copy staging_factCovid
-    from '{TARGET_OUTPUT_BUCKET}factCovid.csv'
-    credentials 'aws_iam_role={DWH_ROLE_ARN}'
-    delimiter ','
-    region '{TARGET_REGION}'
-    IGNOREHEADER 1
-    EMPTYASNULL
-    BLANKSASNULL
-    MAXERROR 100
-    """
-    )
-except ClientError as error:
-    print(error)
-except Exception as e:
-    print(e)
+    # DIMENSION TABLE 2 >>>
+    # Initializing dimDate dataframe and dropping duplicates if any
+    dimDate = rearc_covid_19_testing_data[['fips', 'date']].drop_duplicates(keep='first')
+    
+    # Modifying date format and adding year, mmonth and dayofweek numeric columns
+    dimDate['date'] = pd.to_datetime(dimDate['date'], format='%Y%m%d')
+    dimDate['year'] = dimDate['date'].dt.year
+    dimDate['month'] = dimDate['date'].dt.month
+    dimDate["day_of_week"] = dimDate['date'].dt.dayofweek
+    
+    # Modifying data types to match redshift data types, and nulling invalid data types
+    dimDate['fips'] = dimDate['fips'].astype(float)
+    dimDate['date'] = dimDate['date'].astype('datetime64[ns]')
     
     
-try:
-    cur.execute(
-    f"""
-    copy staging_dimdate
-    from '{TARGET_OUTPUT_BUCKET}dimDate.csv'
-    credentials 'aws_iam_role={DWH_ROLE_ARN}'
-    delimiter ','
-    region '{TARGET_REGION}'
-    IGNOREHEADER 1
-    EMPTYASNULL
-    BLANKSASNULL
-    MAXERROR 100
-    """
+    # DIMENSION TABLE 2 >>>
+    # Initializing 2 dataframes with pyspark to handle larger data processing
+    enigma_jhu = spark.read.csv(
+        fr"{job_staging_s3Path.rstrip('/')}/enigma_jhu.csv", 
+        header=True, 
+        inferSchema=True
     )
-except ClientError as error:
-    print(error)
-except Exception as e:
-    print(e)
     
-
-try:
-    cur.execute(
-    f"""
-    copy staging_dimRegion
-    from '{TARGET_OUTPUT_BUCKET}dimRegion.csv'
-    credentials 'aws_iam_role={DWH_ROLE_ARN}'
-    delimiter ','
-    region '{TARGET_REGION}'
-    IGNOREHEADER 1
-    EMPTYASNULL
-    BLANKSASNULL
-    MAXERROR 100
-    """
+    enigma_nytimes_data_in_usa = spark.read.csv(
+        fr"{job_staging_s3Path.rstrip('/')}/enigma_nytimes_data_in_usa.csv", 
+        header=True, 
+        inferSchema=True
     )
-except ClientError as error:
-    print(error)
-except Exception as e:
-    print(e)
-job.commit()
+    # Selecting required columns and dropping duplicate values
+    dimRegion_1 = enigma_jhu.select('fips', 'province_state', 'country_region', 'latitude', 'longitude').distinct()
+    dimRegion_2 = enigma_nytimes_data_in_usa.select('fips', 'county', 'state').distinct()
+    
+    # Redistribtion data across 5 partitions based on 'fips' column value to optimize join operation
+    dimRegion_1 = dimRegion_1.repartition(5, 'fips')
+    dimRegion_2 = dimRegion_2.repartition(5, 'fips')
+    dimRegion_2 = dimRegion_2.withColumnRenamed('fips', 'fips2') 
+    
+    # Perform join (merge) operation on two dataframes on fips1 = fips2
+    dimRegion = dimRegion_1.join(
+        dimRegion_2, 
+        dimRegion_1["fips"] == dimRegion_2["fips2"], 
+        "inner"
+    )
+    # fips1 and fips2 columns are identical so dropping fips2
+    dimRegion = dimRegion.drop('fips2')
+    
+    # Convert to pandas dataframe and modify fips colum data type to float
+    dimRegion = dimRegion.toPandas()
+    dimRegion['fips'] = dimRegion['fips'].astype(float) 
+    
+    # Force values with invalid data type to null in respective columns
+    dimRegion['latitude'] = pd.to_numeric(dimRegion['latitude'], errors= 'coerce')
+    dimRegion['longitude'] = pd.to_numeric(dimRegion['longitude'], errors= 'coerce')
+    
+    return factCovid, dimHospital, dimRegion, dimDate
+    
+if __name__ == "__main__":
+    main()

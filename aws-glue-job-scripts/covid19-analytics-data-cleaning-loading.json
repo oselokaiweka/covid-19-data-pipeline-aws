@@ -4,7 +4,7 @@
   "description" : "Load data into dataframes and clean data before loading to redshift cluster tables",
   "role" : "arn:aws:iam::211125552279:role/covid19-etl-s3full-glueservice-role",
   "executionProperty" : {
-    "maxConcurrentRuns" : 5
+    "maxConcurrentRuns" : 10
   },
   "command" : {
     "name" : "glueetl",
@@ -17,6 +17,7 @@
     "--enable-metrics" : "true",
     "--spark-event-logs-path" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/redshift-cluster-sparkHistoryLogs/",
     "--enable-job-insights" : "false",
+    "--additional-python-modules" : "psycopg2-binary==2.9.9,pyarrow==17.0.0,awswrangler",
     "--enable-observability-metrics" : "true",
     "--enable-continuous-cloudwatch-log" : "true",
     "--job-bookmark-option" : "job-bookmark-enable",
