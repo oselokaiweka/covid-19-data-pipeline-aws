@@ -55,50 +55,25 @@ def main():
         job_bucket_name = config.get('S3', 'JOB_BUCKET_NAME')
         job_staging_s3Path = config.get('S3', 'JOB_STAGING_PATH')
         job_staging_s3Prefix = config.get('S3', 'JOB_STAGING_PREFIX')
+        job_output_s3Path = config.get('S3', 'JOB_OUTPUT_PATH')
         job_temp_path = config.get('S3', 'JOB_TEMP_PATH')
         schema_name = config.get('GLUE', 'SCHEMA_NAME')
         job_region = config.get('S3', 'JOB_REGION')
         
-
-        # Initialize S3 client to create and/or access staging s3 bucket
-        job_s3_client = boto3.client(
-            's3', 
+        
+        # Set up the boto3 session
+        session = boto3.Session(
             region_name=job_region,
             aws_access_key_id=aws_key, 
             aws_secret_access_key=aws_secret
         )
         
-        # Initialize Glue client to access and retrieve schema table list
-        glue_client = boto3.client(
-            'glue', 
-            region_name=job_region,
-            aws_access_key_id=aws_key, 
-            aws_secret_access_key=aws_secret
-        )
-        
-        # Initialize redshift client to create tables from dataframes structures and copy data
-        redshift_client = boto3.client(
-            'redshift',
-            region_name=job_region,
-            aws_access_key_id=aws_key, 
-            aws_secret_access_key=aws_secret
-        )
-
-        # Initialize ec2 client to acess VPC Endpoint
-        ec2_client = boto3.resource(
-            'ec2',
-            region_name=job_region,
-            aws_access_key_id=aws_key, 
-            aws_secret_access_key=aws_secret
-        )
-
-        # Initialize iam client to obtain role arn for redshift
-        iam_client = boto3.client(
-            'iam',
-            region_name=job_region,
-            aws_access_key_id=aws_key, 
-            aws_secret_access_key=aws_secret
-        )
+        # Initialize required boto3 clients
+        job_s3_client = session.client('s3')
+        glue_client = session.client('glue')
+        redshift_client = session.client('redshift')
+        ec2_client = session.resource('ec2')
+        iam_client = session.client('iam')
         
         # Call function to load data into dataframes
         factCovid, dimHospital, dimRegion, dimDate = load_files_into_dataframes(job_staging_s3Path=job_staging_s3Path)
@@ -106,6 +81,20 @@ def main():
         print(dimRegion.head(2))
         print(dimHospital.head(2))
         print(dimDate.head(2))
+        
+        dfs_dict = {
+            'factCovid': factCovid,
+            'dimHospital': dimHospital,
+            'dimRegion': dimRegion,
+            'dimDate': dimDate
+        }
+        
+        # Load dataframes to s3 output bucket
+        write_dfs_to_bucket(dfs_dict, job_output_s3Path)  
+        
+        # Generate redshift create table statements from dataframes
+        sql_statements = create_redshift_tables(dfs_dict)
+
         
     except Exception as e:
         logger.error('Failed to process data and load into dataframes. Error: %s', e)
@@ -197,6 +186,34 @@ def load_files_into_dataframes(job_staging_s3Path):
     dimRegion['longitude'] = pd.to_numeric(dimRegion['longitude'], errors= 'coerce')
     
     return factCovid, dimHospital, dimRegion, dimDate
+
+
+def write_dfs_to_bucket(dfs_dict, s3path):
+    for df_name, df in dfs_dict.items():
+        wr.s3.to_csv(df, fr"{s3path}/{df_name}.csv", index=False)
+    logger.info("Files succesfully uploated to output s3 bucket")
+ 
     
+def create_redshift_tables(dfs_dict):
+    # Construct CREATE TABLE SQL statements dynamically from pandas dataframe
+    statements = {}
+    for df_name, df in dfs_dict.items():
+        # Generate the CREATE TABLE SQL statement
+        sql = pd.io.sql.get_schema(df.reset_index(), df_name) + ";"
+        sql_stage = pd.io.sql.get_schema(df.reset_index(), fr"{df_name}_stage") + ";"
+        # Add the statement to the dictionary
+        statements[fr"{df_name}Sql"] = sql
+        statements[fr"{df_name}_stageSql"] = sql_stage
+    # Print out all the statements (for debugging or logging purposes)
+    for table_name, create_statement in statements.items():
+        print(f"Table: {table_name}\nSQL Statement:\n{create_statement}\n")
+    
+    return statements
+
+        
+
+ 
+   
+
 if __name__ == "__main__":
     main()
