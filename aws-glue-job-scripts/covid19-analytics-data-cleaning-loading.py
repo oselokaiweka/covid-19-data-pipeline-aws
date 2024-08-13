@@ -7,13 +7,13 @@ import configparser
 import pandas as pd
 import awswrangler as wr
 from io import StringIO
-from pathlib import Path
 from pyspark.sql import SparkSession
 from botocore.exceptions import ClientError
 from awsglue.utils import getResolvedOptions
-from concurrent.futures import ThreadPoolExecutor, as_completed
-  
-spark = SparkSession.builder.master("local[*]").appName("Join").getOrCreate()
+
+spark = SparkSession.builder \
+    .appName("Covid19-analytics-data-cleaning-loading") \
+    .getOrCreate()
 
 # Configure logging
 logging.basicConfig(
@@ -52,13 +52,15 @@ def main():
         # Access parameters stored in config file
         aws_key = config.get('AWS', 'KEY')
         aws_secret = config.get('AWS', 'SECRET')
+        job_region = config.get('S3', 'JOB_REGION')
         job_bucket_name = config.get('S3', 'JOB_BUCKET_NAME')
         job_staging_s3Path = config.get('S3', 'JOB_STAGING_PATH')
         job_staging_s3Prefix = config.get('S3', 'JOB_STAGING_PREFIX')
         job_output_s3Path = config.get('S3', 'JOB_OUTPUT_PATH')
         job_temp_path = config.get('S3', 'JOB_TEMP_PATH')
         schema_name = config.get('GLUE', 'SCHEMA_NAME')
-        job_region = config.get('S3', 'JOB_REGION')
+        cluster_identifier = config.get('DWH', 'DWH_CLUSTER_IDENTIFIER')
+        db_password = config.get('DWH', 'DWH_DB_PASSWORD')
         
         
         # Set up the boto3 session
@@ -77,11 +79,8 @@ def main():
         
         # Call function to load data into dataframes
         factCovid, dimHospital, dimRegion, dimDate = load_files_into_dataframes(job_staging_s3Path=job_staging_s3Path)
-        print(factCovid.head(2))
-        print(dimRegion.head(2))
-        print(dimHospital.head(2))
-        print(dimDate.head(2))
         
+        # Define dictionary of dataframes
         dfs_dict = {
             'factCovid': factCovid,
             'dimHospital': dimHospital,
@@ -89,12 +88,26 @@ def main():
             'dimDate': dimDate
         }
         
-        # Load dataframes to s3 output bucket
+        # Load dataframes to s3 output bucket with defined dictionary
         write_dfs_to_bucket(dfs_dict, job_output_s3Path)  
         
-        # Generate redshift create table statements from dataframes
+        # Generate redshift create table statements from dataframes 
         sql_statements = create_redshift_tables(dfs_dict)
 
+        # Obtain redshift database connection object
+        conn = redshift_connection(
+            cluster_identifier=cluster_identifier, 
+            db_password=db_password, 
+            redshift_client=redshift_client, 
+            ec2_client=ec2_client
+        )
+
+        # Initialize curso and execute create table statements
+        cursor = conn.cursor()
+        for table_name, query in sql_statements.items():
+            cursor.execute(query)
+            logger.info(table_name + ' table created successfully')
+            
         
     except Exception as e:
         logger.error('Failed to process data and load into dataframes. Error: %s', e)
@@ -210,9 +223,52 @@ def create_redshift_tables(dfs_dict):
     
     return statements
 
+# Connect to redshift and return connection object
+def redshift_connection(cluster_identifier, db_password, redshift_client, ec2_client):
+    try:
+        clusterProps = redshift_client.describe_clusters(ClusterIdentifier=cluster_identifier)['Clusters'][0]
         
+        # Authorize ingress through vpc to redshift with security group rules
+        try:
+            vpc = ec2_client.Vpc(id=clusterProps['VpcId'])
+            default_SG = list(vpc.security_groups.all())[0]
+        
+            default_SG.authorize_ingress(
+                GroupName=default_SG.group_name,
+                CidrIp='0.0.0.0/0',
+                IpProtocol='TCP',
+                FromPort=int(clusterProps['Endpoint']['Port']),
+                ToPort=int(clusterProps['Endpoint']['Port'])
+            )
+        except ClientError as e:
+            # Check for duplicate rule errors
+            error_code = e.response['Error']['Code']
+            if error_code == 'InvalidPermission.Duplicate':
+                print('Security group rule exists, no further actions required')
+            else:
+                raise e
 
- 
+        conn = psycopg2.connect(
+            password=db_password,
+            dbname=clusterProps['DBName'],
+            user=clusterProps['MasterUsername'],
+            host=clusterProps['Endpoint']['Address'],
+            port=int(clusterProps['Endpoint']['Port'])
+        )
+        
+        conn.set_session(autocommit=True)
+        logger.info("Redshift connection succesful")
+        
+        return conn
+        
+    except ClientError as e:
+        logger.error(e)
+    
+    except Exception as e:
+        print(e)
+    
+
+                
    
 
 if __name__ == "__main__":
