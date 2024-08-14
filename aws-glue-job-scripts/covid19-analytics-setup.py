@@ -118,7 +118,7 @@ def copy_objects_from_s3_to_s3(
 # Function to create s3 bucket 
 create_s3_if_not_exists(
     job_bucket_name, 
-    job_bucket_region, 
+    job_region, 
     job_s3_client
 )               
 
