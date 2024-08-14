@@ -1,0 +1,43 @@
+{
+  "name" : "covid19-analytics-data-loading",
+  "jobMode" : "SCRIPT",
+  "description" : "Data validation and loading into data warehouse for analytics",
+  "role" : "arn:aws:iam::211125552279:role/covid19-etl-s3full-glueservice-role",
+  "executionProperty" : {
+    "maxConcurrentRuns" : 9
+  },
+  "command" : {
+    "name" : "glueetl",
+    "scriptLocation" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/data-loading-scripts/covid19-analytics-data-loading.py",
+    "pythonVersion" : "3"
+  },
+  "defaultArguments" : {
+    "--CONFIG_FILE_KEY" : "covid19-analytics-config/covid19-analytics.config",
+    "--enable-glue-datacatalog" : "true",
+    "--job-bookmark-option" : "job-bookmark-enable",
+    "--CONFIG_BUCKET_NAME" : "jk-config-s3",
+    "--TempDir" : "s3://jk-config-s3/covid19-analytics-config/glue-job-assets/temporary/",
+    "--enable-metrics" : "true",
+    "--spark-event-logs-path" : "s3://aws-glue-assets-211125552279-us-east-2/sparkHistoryLogs/",
+    "--enable-job-insights" : "false",
+    "--additional-python-modules" : "psycopg2-binary==2.9.9,pyarrow==17.0.0,asn1crypto==1.5.1,awswrangler==3.9.0,lxml==5.3.0,redshift-connector==2.1.3,scramp==1.4.5",
+    "--enable-observability-metrics" : "true",
+    "--enable-continuous-cloudwatch-log" : "true",
+    "--job-language" : "python",
+    "--TEMPDIR--TEMPDIR" : "temp/"
+  },
+  "maxRetries" : 0,
+  "allocatedCapacity" : 10,
+  "timeout" : 2880,
+  "maxCapacity" : 10.0,
+  "glueVersion" : "4.0",
+  "numberOfWorkers" : 10,
+  "workerType" : "G.1X",
+  "executionClass" : "FLEX",
+  "sourceControlDetails" : {
+    "provider" : "GITHUB",
+    "repository" : "covid-19-data-pipeline-aws",
+    "branch" : "main",
+    "folder" : "aws-glue-job-scripts"
+  }
+}
