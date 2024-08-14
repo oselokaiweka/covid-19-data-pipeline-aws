@@ -5,8 +5,7 @@ import logging
 import configparser
 import pandas as pd
 import awswrangler as wr
-import redshift_connector
-from pyspark.sql import SparkSession
+import psycopg2
 from botocore.exceptions import ClientError
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
@@ -19,9 +18,9 @@ glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
 
-sys.argv += ["--JOB_NAME", "covid19-analytics-data-warehouse-loading"]
-sys.argv += ["--CONFIG_BUCKET_NAME", "jk-config-s3"]
-sys.argv += ["--CONFIG_FILE_KEY", "covid19-analytics-config/covid19-analytics.config"]
+# sys.argv += ["--JOB_NAME", "covid19-analytics-data-warehouse-loading"]
+# sys.argv += ["--CONFIG_BUCKET_NAME", "jk-config-s3"]
+# sys.argv += ["--CONFIG_FILE_KEY", "covid19-analytics-config/covid19-analytics.config"]
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +28,8 @@ logging.basicConfig(
     format='%(asctime)s %(levelname) %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
 # Access Glue job parameters
 args = getResolvedOptions(
     sys.argv, [
@@ -37,6 +38,7 @@ args = getResolvedOptions(
         'CONFIG_FILE_KEY',
     ]
 )
+
 # Initialize job, setup parameters,logging and other environment settings
 job.init(args['JOB_NAME'],args)
 
@@ -68,14 +70,18 @@ schema_name = config.get('GLUE', 'SCHEMA_NAME2')
 db_password = config.get('DWH', 'DWH_DB_PASSWORD')
 cluster_identifier = config.get('DWH', 'DWH_CLUSTER_IDENTIFIER')
 
+
 # Set up the boto3 session
 session = boto3.Session(
     region_name=job_region,
     aws_access_key_id=aws_key, 
     aws_secret_access_key=aws_secret
 )
-# Initialize Glue client to access and retrieve schema table list
+
+# Initialize required clients
 glue_client = session.client('glue')
+redshift_client = session.client('redshift')
+ec2_client = session.resource('ec2')
 
 # Check if crawler exists, creates crawler if not found
 try:
@@ -128,6 +134,9 @@ tables = glue_client.get_tables(DatabaseName=schema_name)['TableList']
 table_count = len(tables)
 print(table_count)
 logger.info("\nTotal of %s created by crawler", table_count)
+
+
+
 # Loop through tables
 
 dfs = {} # Store each {table_name : dataframe}
@@ -141,6 +150,7 @@ for table in tables:
         table_name=table['Name'], 
         transformation_ctx=f"dynamic_frame_{table['Name']}"
     )
+    
     # Map data loccation to dynamic frame
     table_metadata = glue_client.get_table(DatabaseName=schema_name, Name=table['Name'])
     s3_path = table_metadata['Table']['StorageDescriptor']['Location']
@@ -156,33 +166,64 @@ for table_name, df in dfs.items():
     
 for table_name, s3_path in s3_paths.items():
     print(f"{table_name}: {s3_path}")
-redshift_client = session.client('redshift')
 
+
+
+
+# Establiish connection
+# Get data warehouse configurations (cp for cluster properties) 
 cp = redshift_client.describe_clusters(ClusterIdentifier=cluster_identifier)['Clusters'][0]
 dbname = cp['DBName']
 user = cp['MasterUsername']
 host = cp['Endpoint']['Address']
 port = int(cp['Endpoint']['Port'])
+vpc_id = cp['VpcId']
+role_arn = cp['IamRoles'][0]['IamRoleArn']
 
-# Connect to Redshift
-con = redshift_connector.connect(
-    database=dbname,
+# Create security group VPC ingress rule for where cluster resides
+try:
+    vpc = ec2_client.Vpc(id=vpc_id)
+    default_SG = list(vpc.security_groups.all())[0]
+    default_SG.authorize_ingress(
+        GroupName=default_SG.group_name,
+        CidrIp='0.0.0.0/0',
+        IpProtocol='TCP',
+        FromPort=port,
+        ToPort=port,
+    )
+except ClientError as e:
+    # Check is security group rule already exists
+    if e.response['Error']['Code'] == 'InvalidPermission.Duplicate':
+        print('Security group rule exists, no further actions required')
+    else:
+        raise e
+
+# Connect to Redshift data warehouse
+conn = psycopg2.connect(
+    host=host,
+    dbname=dbname,
     user=user,
     password=db_password,
-    host=host,
     port=port
 )
 
+conn.set_session(autocommit=True) 
+cursor = conn.cursor()
+
+# Copy Dataframe to redshift tables already created in previous job
 for table_name, df in dfs.items():
-    wr.redshift.copy_from_files(
-        path=s3_paths[table_name],
-        con=con,
-        table=table_name[:-4],
-        schema=schema_name,  
-        iam_role=crawler_roleArn,
-        delimiter=',',   
-        ignore_headers=1, 
-        boto3_session=session
-        # Add more COPY command parameters if needed
-    )
+    
+    cursor.execute(
+        fr"""
+        copy {table_name[:-4]}
+        from '{s3_paths[table_name]}'
+        credentials 'aws_iam_role={role_arn}'
+        delimiter ','
+        region '{job_region}'
+        IGNOREHEADER 1
+        EMPTYASNULL
+        BLANKSASNULL
+        """
+        )
+
 job.commit()
