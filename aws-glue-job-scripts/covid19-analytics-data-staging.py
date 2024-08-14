@@ -52,30 +52,17 @@ def main():
         job_region = config.get('S3', 'JOB_REGION')
         
         
-        
-        # Initialize S3 client to create and/or access staging s3 bucket
-        job_s3_client = boto3.client(
-            's3', 
+        # Initialize boto3 session
+        session = boto3.Session(
             region_name=job_region,
             aws_access_key_id=aws_key, 
             aws_secret_access_key=aws_secret
         )
         
-        # Initialize Glue client to access and retrieve schema table list
-        glue_client = boto3.client(
-            'glue', 
-            region_name=job_region,
-            aws_access_key_id=aws_key, 
-            aws_secret_access_key=aws_secret
-        )
-        
-        # Initialize Athena client to query data and download query results
-        athena_client = boto3.client(
-            'athena',
-            region_name=job_region,
-            aws_access_key_id=aws_key, 
-            aws_secret_access_key=aws_secret
-        )
+        # Initialize required clients 
+        job_s3_client = session.client('s3')
+        glue_client = session.client('glue')
+        athena_client = session.client('athena')
         
         # Function retrieves athena tables within the given schema
         tables = glue_client.get_tables(DatabaseName=schema_name)['TableList']
