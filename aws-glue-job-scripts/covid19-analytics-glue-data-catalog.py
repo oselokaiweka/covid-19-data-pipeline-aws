@@ -44,7 +44,7 @@ def main():
         aws_secret = config.get('AWS', 'SECRET')
         job_bucket_name = config.get('S3', 'JOB_BUCKET_NAME')
         job_rawData_prefix = config.get('S3', 'JOB_RAWDATA_PREFIX')
-        crawler_name = config.get('GLUE', 'CRAWLER_NAME')
+        crawler_name = config.get('GLUE', 'CRAWLER1')
         crawler_roleArn = config.get('GLUE', 'CRAWLER_ROLE')
         schema_name = config.get('GLUE', 'SCHEMA_NAME')
         job_region = config.get('S3', 'JOB_REGION')
