@@ -105,6 +105,8 @@ def main():
         # Initialize curso and execute create table statements
         cursor = conn.cursor()
         for table_name, query in sql_statements.items():
+            # Slice off the 'Sql' from factCovidSql to get actual table_name eg. (factCovidSql[:-3])
+            cursor.execute(f"DROP TABLE IF EXISTS {table_name[:-3]};") 
             cursor.execute(query)
             logger.info(table_name + ' table created successfully')
             
@@ -121,14 +123,29 @@ def load_files_into_dataframes(job_staging_s3Path):
     enigma_jhu = wr.s3.read_csv(fr"{job_staging_s3Path.rstrip('/')}/enigma_jhu.csv")
     rearc_covid_19_testing_data = wr.s3.read_csv(fr"{job_staging_s3Path.rstrip('/')}/rearc_covid_19_testing_data.csv")
     rearc_covid_19_testing_data['date'] = pd.to_datetime(rearc_covid_19_testing_data['date'], errors= 'coerce')
+    rearc_covid_19_testing_data['date'] = pd.to_datetime(rearc_covid_19_testing_data['date'], format='%Y%m%d')
 
     
-    # Select required columns and deduplicate records
+    # Select required columns, deduplicate records and null non-numeric values in numeric columns
     factCovid_1 = enigma_jhu[['fips', 'province_state', 'country_region', 'confirmed', 'deaths', 'recovered', 'active' ]].drop_duplicates(keep='first')
     factCovid_2 = rearc_covid_19_testing_data[['fips', 'date', 'positive', 'negative', 'hospitalizedcurrently', 'hospitalized', 'hospitalizeddischarged' ]].drop_duplicates(keep='first')
     
+    factCovid_1['fips'] = factCovid_1['fips'].replace('-', None)
+    factCovid_2['fips'] = factCovid_2['fips'].replace('-', None)
+    
+    factCovid_1['fips'] = pd.to_numeric(factCovid_1['fips'], errors= 'coerce')
+    factCovid_1['fips'] = factCovid_1['fips'].astype('float')
+
+    factCovid_2['fips'] = pd.to_numeric(factCovid_2['fips'], errors= 'coerce')
+    factCovid_2['fips'] = factCovid_2['fips'].astype('float')
+    factCovid_2['date'] = factCovid_2['date'].astype('datetime64[ns]')
+    
+    
+    
     # Merge (join) tables
     factCovid = pd.merge(factCovid_1, factCovid_2, on='fips', how='inner')
+    factCovid = factCovid.drop_duplicates(keep='first')
+
 
 
     # DIMENSION TABLE 1 >>>
@@ -139,9 +156,19 @@ def load_files_into_dataframes(job_staging_s3Path):
     dimHospital =  rearc_usa_hospital_beds[['fips', 'state_name', 'latitude', 'longtitude', 'hq_address', 'hospital_name', 'hospital_type', 'hq_city', 'hq_state']].drop_duplicates(keep='first')
     dimHospital = dimHospital.rename(columns={'longtitude': 'longitude'}) # fix typo in column name
     
-    # Nulling invalid data types in numeric columns
+    # Nulling invalid values in numeric columns and typecast column to float
     dimHospital['latitude'] = pd.to_numeric(dimHospital['latitude'], errors= 'coerce')
     dimHospital['longitude'] = pd.to_numeric(dimHospital['longitude'], errors= 'coerce')
+    
+    dimHospital['fips'] = dimHospital['fips'].replace('-', None)
+    dimHospital['fips'] = pd.to_numeric(dimHospital['fips'], errors= 'coerce')
+    
+    dimHospital['latitude'] = dimHospital['latitude'].astype('float')
+    dimHospital['longitude'] = dimHospital['longitude'].astype('float')
+    dimHospital['fips'] = dimHospital['fips'].astype('float')
+    
+    dimHospital = dimHospital.drop_duplicates(keep='first')
+
     
     
     # DIMENSION TABLE 2 >>>
@@ -149,14 +176,18 @@ def load_files_into_dataframes(job_staging_s3Path):
     dimDate = rearc_covid_19_testing_data[['fips', 'date']].drop_duplicates(keep='first')
     
     # Modifying date format and adding year, mmonth and dayofweek numeric columns
-    dimDate['date'] = pd.to_datetime(dimDate['date'], format='%Y%m%d')
     dimDate['year'] = dimDate['date'].dt.year
     dimDate['month'] = dimDate['date'].dt.month
     dimDate["day_of_week"] = dimDate['date'].dt.dayofweek
     
     # Modifying data types to match redshift data types, and nulling invalid data types
+    dimDate['fips'] = dimDate['fips'].replace('-', None)
+    dimDate['fips'] = pd.to_numeric(dimDate['fips'], errors= 'coerce')
     dimDate['fips'] = dimDate['fips'].astype(float)
     dimDate['date'] = dimDate['date'].astype('datetime64[ns]')
+    
+    dimDate = dimDate.drop_duplicates(keep='first')
+    
     
     
     # DIMENSION TABLE 2 >>>
@@ -192,18 +223,28 @@ def load_files_into_dataframes(job_staging_s3Path):
     
     # Convert to pandas dataframe and modify fips colum data type to float
     dimRegion = dimRegion.toPandas()
+    
+    dimRegion['fips'] = dimRegion['fips'].replace('-', None)
+    dimRegion['fips'] = pd.to_numeric(dimRegion['fips'], errors= 'coerce')
     dimRegion['fips'] = dimRegion['fips'].astype(float) 
     
     # Force values with invalid data type to null in respective columns
     dimRegion['latitude'] = pd.to_numeric(dimRegion['latitude'], errors= 'coerce')
     dimRegion['longitude'] = pd.to_numeric(dimRegion['longitude'], errors= 'coerce')
     
+    dimRegion['longitude'] = dimRegion['longitude'].astype('float')
+    dimRegion['latitude'] = dimRegion['latitude'].astype('float')
+    
+    dimRegion = dimRegion.drop_duplicates(keep='first')
+    
+    
+    
     return factCovid, dimHospital, dimRegion, dimDate
 
 
 def write_dfs_to_bucket(dfs_dict, s3path):
     for df_name, df in dfs_dict.items():
-        wr.s3.to_csv(df, fr"{s3path}/{df_name}.csv", index=False)
+        wr.s3.to_csv(df, fr"{s3path.rstrip('/')}/{df_name}.csv", index=False)
     logger.info("Files succesfully uploated to output s3 bucket")
  
     
