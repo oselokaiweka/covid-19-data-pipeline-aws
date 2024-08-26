@@ -9,6 +9,8 @@ This ETL pipeline leverages on AWS SDK for python (Boto3) to build a robust data
 ## Table of Contents
 •	Introduction
 
+•	Understanding The Data
+
 •	Architecture Diagram
 
 •	Setup Instructions
@@ -25,7 +27,14 @@ This ETL pipeline leverages on AWS SDK for python (Boto3) to build a robust data
 
 •	Further Reading/References
 
-![covid19-preprocess-data-model drawio (1)](https://github.com/user-attachments/assets/f001cac2-a914-45ac-8d5e-2ce7174bb603)
+
+## Understanding the data
+The project data is sourced from AWS COVID-19 data lake via AWS Data Exchange. The AWS COVID-19 data lake is a centraized repository that offers free up-to-date and curated dataset focused on the spread and characteristiics of the coronavirus. The data lake contains datasets such as COVID-19 case tracking, testing data, hospital bed availability and other research data. 
+
+The goal is to create a data warehouse star schema with one facts table that contains Covid-19 case tracking data and three dimensions tables thatt contain information about locations, dates and hospital records for each facts record using the 'fips' ID column to join the records. See the before and after Entity Relationship Diagram ERD, below. 
+ 
+![covid19-data-model drawio](https://github.com/user-attachments/assets/fd7692ff-eaac-4fa9-80a6-9340bfc1db81)
+
                           _Figure 1. Top: Extrracted Data Model, Bottom: Transformed Data Model_
 
 ## Architecture overview
