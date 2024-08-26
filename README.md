@@ -72,7 +72,7 @@ The process involves setting up S3 buckets for storage and extracting covid-19 d
 ### JOB 1: Bucket Setup
 **•	Purpose:** Create and configure S3 buckets for raw and processed data.
 
-**• Link to script:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-setup.py
+**• View the full code:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-setup.py
 
 **•	Key Steps:**
 
@@ -87,6 +87,8 @@ The process involves setting up S3 buckets for storage and extracting covid-19 d
 ### JOB 2: Redshift Setup
 **•	Purpose:** Set up the Redshift cluster and configure IAM roles.
 
+**• View the full code:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-redshift-cluster.py
+
 **•	Key Steps:**
 
   1. Initialize Redshift and IAM clients.
@@ -99,6 +101,8 @@ The process involves setting up S3 buckets for storage and extracting covid-19 d
 
 ### JOB 3: Crawl Raw Data
 **•	Purpose:** Use Glue Crawlers to catalog raw data in S3.
+
+**• View the full code:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-glue-data-catalog.py
 
 **•	Key Steps:**
 
@@ -113,6 +117,8 @@ The process involves setting up S3 buckets for storage and extracting covid-19 d
 ### JOB 4: Stage Data
 **•	Purpose:** Stage data in S3 for further processing.
 
+**• View the full code:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-data-staging.py
+
 **•	Key Steps:**
 
   1. Execute Athena queries to retrieve data.
@@ -123,6 +129,8 @@ The process involves setting up S3 buckets for storage and extracting covid-19 d
 
 ### JOB 5: Clean Data
 **•	Purpose:** Clean and transform data using Spark and Pandas.
+
+**• View the full code:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-data-cleaning-loading.py
 
 **•	Key Steps:**
 
@@ -136,6 +144,8 @@ The process involves setting up S3 buckets for storage and extracting covid-19 d
 
 ### JOB 6: Load Data
 **•	Purpose:** Load cleaned data into Redshift.
+
+**• View the full code:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-data-loading.py
 
 **•	Key Steps:**
 
