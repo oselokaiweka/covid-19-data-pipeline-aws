@@ -72,6 +72,8 @@ The process involves setting up S3 buckets for storage and extracting covid-19 d
 ### JOB 1: Bucket Setup
 **•	Purpose:** Create and configure S3 buckets for raw and processed data.
 
+**• Link to script:** https://github.com/oselokaiweka/covid-19-data-pipeline-aws/blob/main/aws-glue-job-scripts/covid19-analytics-setup.py
+
 **•	Key Steps:**
 
   1. Initialize S3 clients.
