@@ -29,7 +29,7 @@ This ETL pipeline leverages on AWS SDK for python (Boto3) to build a robust data
 
 
 ## Understanding the data
-The project data is sourced from AWS COVID-19 data lake via AWS Data Exchange. The AWS COVID-19 data lake is a centraized repository that offers free up-to-date and curated dataset focused on the spread and characteristiics of the coronavirus. The data lake contains datasets such as COVID-19 case tracking, testing data, hospital bed availability and other research data. 
+The project data is sourced from AWS COVID-19 data lake via AWS Data Exchange. The AWS COVID-19 data lake is a centraized repository that offers free up-to-date and curated dataset focused on the spread and characteristiics of the coronavirus. The data lake contains datasets such as COVID-19 case tracking, testing data, hospital bed availability and other research data. The data can be found via this link: https://aws.amazon.com/marketplace/pp/prodview-2djddrfg7gx6k?sr=0-1&ref_=beagle&applicationId=AWSMPContessa#resources
 
 The goal is to create a data warehouse star schema with one facts table that contains Covid-19 case tracking data and three dimensions tables thatt contain information about locations, dates and hospital records for each facts record using the 'fips' ID column to join the records. See the before and after Entity Relationship Diagrams, below. 
  
