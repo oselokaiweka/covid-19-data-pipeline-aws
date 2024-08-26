@@ -35,7 +35,7 @@ The goal is to create a data warehouse star schema with one facts table that con
  
 ![covid19-data-model drawio](https://github.com/user-attachments/assets/fd7692ff-eaac-4fa9-80a6-9340bfc1db81)
 
-                          _Figure 1. Top: Extrracted Data Model, Bottom: Transformed Data Model_
+_Figure 1. Top: Extrracted Data Model, Bottom: Transformed Data Model_
 
 ## Architecture overview
 The process involves setting up S3 buckets for storage and extracting covid-19 data from data lake to landing bucket, setting up Redshift data warehouse cluster, cataloging raw data with glue crawlers, querying data with Athena then staging filtered data, transforming data using PySpark, Pandas and AWS Wrangler, cataloging cleaned data and dynamically building database tables in Redshift based on a star schema design, and then finally loading data with Redshift copy command.  
