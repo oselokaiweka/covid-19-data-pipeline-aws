@@ -7,11 +7,11 @@ When building ETL pipelines, there are many services you need to incorporate in 
 This ETL pipeline leverages on AWS SDK for python (Boto3) to build a robust data pipeline as code, tying together various AWS services and third party frameworks, and finally deployed using AWS Glue ETL. Even though the architecture can be more concise, the goal is to explore the use of simple python code to setup cloud infrastructure, extract data, transform data and load data while building your knowledge about AWS services.
 
 ## Table of Contents
-•	Introduction
+•	Project Overview
 
 •	Understanding The Data
 
-•	Architecture Diagram
+•	Data Pipeline Architecture 
 
 •	Setup Instructions
 
@@ -19,7 +19,7 @@ This ETL pipeline leverages on AWS SDK for python (Boto3) to build a robust data
 
 •	Configuration Details
 
-•	Code Snippets and Screenshots
+•	Ochestration with Glue Wworkflows
 
 •	CloudWatch Monitoring
 
