@@ -25,12 +25,15 @@ This ETL pipeline leverages on AWS SDK for python (Boto3) to build a robust data
 
 •	Further Reading/References
 
+![covid19-preprocess-data-model drawio (1)](https://github.com/user-attachments/assets/f001cac2-a914-45ac-8d5e-2ce7174bb603)
+                          _Figure 1. Top: Extrracted Data Model, Bottom: Transformed Data Model_
+
 ## Architecture overview
 The process involves setting up S3 buckets for storage and extracting covid-19 data from data lake to landing bucket, setting up Redshift data warehouse cluster, cataloging raw data with glue crawlers, querying data with Athena then staging filtered data, transforming data using PySpark, Pandas and AWS Wrangler, cataloging cleaned data and dynamically building database tables in Redshift based on a star schema design, and then finally loading data with Redshift copy command.  
 
 
 ![COVID19-ETL-ARCHITECTURE drawio](https://github.com/user-attachments/assets/635eda25-85ba-4c43-a4f8-de0389ffbed5)
-                          _Figure 1. AWS Glue workflow architecture_
+                          _Figure 2. AWS Glue workflow architecture_
 
 
 #
