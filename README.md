@@ -31,11 +31,11 @@ This ETL pipeline leverages on AWS SDK for python (Boto3) to build a robust data
 ## Understanding the data
 The project data is sourced from AWS COVID-19 data lake via AWS Data Exchange. The AWS COVID-19 data lake is a centraized repository that offers free up-to-date and curated dataset focused on the spread and characteristiics of the coronavirus. The data lake contains datasets such as COVID-19 case tracking, testing data, hospital bed availability and other research data. 
 
-The goal is to create a data warehouse star schema with one facts table that contains Covid-19 case tracking data and three dimensions tables thatt contain information about locations, dates and hospital records for each facts record using the 'fips' ID column to join the records. See the before and after Entity Relationship Diagram ERD, below. 
+The goal is to create a data warehouse star schema with one facts table that contains Covid-19 case tracking data and three dimensions tables thatt contain information about locations, dates and hospital records for each facts record using the 'fips' ID column to join the records. See the before and after Entity Relationship Diagrams, below. 
  
 ![covid19-data-model drawio](https://github.com/user-attachments/assets/fd7692ff-eaac-4fa9-80a6-9340bfc1db81)
 
-_Figure 1. Top: Extrracted Data Model, Bottom: Transformed Data Model_
+_Figure 1. Preprocessed and processed data models_
 
 ## Architecture overview
 The process involves setting up S3 buckets for storage and extracting covid-19 data from data lake to landing bucket, setting up Redshift data warehouse cluster, cataloging raw data with glue crawlers, querying data with Athena then staging filtered data, transforming data using PySpark, Pandas and AWS Wrangler, cataloging cleaned data and dynamically building database tables in Redshift based on a star schema design, and then finally loading data with Redshift copy command.  
